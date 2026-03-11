@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dzul-Downloader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #222222;
+    --border-bright: #333333;
+    --text: #e8e8e8;
+    --muted: #666;
+    --accent: #c8f53a;
+    --accent-dim: #8aad1a;
+    --red: #ff4444;
+    --blue: #4af0ff;
+    --orange: #ff9a3c;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 9999;
+  }
+
+  /* Header */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    background: rgba(10,10,10,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    color: #000; line-height: 1;
+  }
+  .logo-text { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo-text span { color: var(--accent); }
+  .header-status {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Main layout */
+  main {
+    max-width: 900px; margin: 0 auto;
+    padding: 40px 24px;
+    display: flex; flex-direction: column; gap: 28px;
+  }
+
+  /* Panel */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 28px;
+  }
+  .panel-label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 3px;
+    color: var(--accent); text-transform: uppercase;
+    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+  }
+  .panel-label::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* URL Input area */
+  .url-row {
+    display: flex; gap: 0;
+    border: 1px solid var(--border-bright);
+    transition: border-color 0.2s;
+  }
+  .url-row:focus-within { border-color: var(--accent); }
+  .url-prefix {
+    background: var(--border); padding: 14px 16px;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    display: flex; align-items: center; white-space: nowrap; user-select: none;
+  }
+  #url-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    padding: 14px 16px;
+  }
+  #url-input::placeholder { color: var(--muted); }
+  .btn-fetch {
+    background: var(--accent); color: #000;
+    border: none; padding: 14px 24px;
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    cursor: pointer; transition: all 0.15s;
+    white-space: nowrap; letter-spacing: 1px;
+  }
+  .btn-fetch:hover { background: #fff; }
+  .btn-fetch:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Info card */
+  #info-card {
+    display: none;
+    margin-top: 24px;
+    border: 1px solid var(--border-bright);
+    overflow: hidden;
+  }
+  .info-thumb {
+    width: 100%; max-height: 200px; object-fit: cover;
+    display: block; border-bottom: 1px solid var(--border);
+  }
+  .info-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; }
+  .info-title { font-size: 15px; font-weight: 600; line-height: 1.3; }
+  .info-meta {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    margin-top: 4px;
+  }
+  .info-meta span { display: flex; align-items: center; gap: 5px; }
+  .info-desc {
+    font-size: 12px; color: var(--muted); line-height: 1.6;
+    margin-top: 6px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  /* Options grid */
+  .options-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px; margin-top: 24px;
+  }
+  @media(max-width: 600px) { .options-grid { grid-template-columns: 1fr 1fr; } }
+  .opt-group label {
+    display: block; font-family: var(--mono); font-size: 10px;
+    letter-spacing: 2px; color: var(--muted); text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .opt-group select, .opt-group input[type="text"] {
+    width: 100%; background: var(--bg);
+    border: 1px solid var(--border-bright); color: var(--text);
+    padding: 10px 12px; font-family: var(--mono); font-size: 12px;
+    outline: none; transition: border-color 0.2s;
+    appearance: none; cursor: pointer;
+  }
+  .opt-group select:focus, .opt-group input:focus { border-color: var(--accent); }
+  .opt-group.span-2 { grid-column: span 2; }
+
+  /* Download button */
+  .btn-download {
+    margin-top: 24px; width: 100%;
+    background: transparent; border: 1px solid var(--accent);
+    color: var(--accent); padding: 16px;
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+    letter-spacing: 2px; cursor: pointer; transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  .btn-download:hover { background: var(--accent); color: #000; }
+  .btn-download:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* Progress */
+  #progress-panel { display: none; }
+  .progress-bar-track {
+    height: 4px; background: var(--border);
+    position: relative; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; background: var(--accent);
+    width: 0%; transition: width 0.3s ease;
+    position: relative;
+  }
+  .progress-bar-fill::after {
+    content: '';
+    position: absolute; right: 0; top: 0;
+    width: 40px; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+  }
+  .progress-stats {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 12px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .progress-pct { font-size: 28px; font-weight: 800; color: var(--accent); }
+  .log-box {
+    margin-top: 16px;
+    background: #000; border: 1px solid var(--border);
+    height: 120px; overflow-y: auto;
+    padding: 12px; font-family: var(--mono); font-size: 11px;
+    color: #555; line-height: 1.7;
+  }
+  .log-box p.active { color: var(--text); }
+  .log-box p.done-line { color: var(--accent); }
+  .log-box p.err-line { color: var(--red); }
+
+  /* Status badge */
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; font-family: var(--mono); font-size: 10px;
+    letter-spacing: 1px; text-transform: uppercase;
+    border: 1px solid;
+  }
+  .badge-downloading { border-color: var(--blue); color: var(--blue); }
+  .badge-done { border-color: var(--accent); color: var(--accent); }
+  .badge-error { border-color: var(--red); color: var(--red); }
+  .badge-pending { border-color: var(--muted); color: var(--muted); }
+
+  /* History */
+  #history-list { display: flex; flex-direction: column; gap: 1px; }
+  .history-item {
+    display: grid; grid-template-columns: 1fr auto;
+    align-items: center; gap: 16px;
+    padding: 14px 16px;
+    background: var(--bg); border: 1px solid var(--border);
+    transition: border-color 0.15s;
+  }
+  .history-item:hover { border-color: var(--border-bright); }
+  .history-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .history-sub {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .history-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .btn-del {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 5px 10px; font-family: var(--mono); font-size: 10px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-del:hover { border-color: var(--red); color: var(--red); }
+  .empty-state {
+    padding: 40px; text-align: center;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  .tab {
+    padding: 10px 20px; font-family: var(--mono); font-size: 11px;
+    letter-spacing: 1px; text-transform: uppercase;
+    cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent;
+    transition: all 0.15s; background: none; border-top: none; border-left: none; border-right: none;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Alert */
+  .alert {
+    padding: 12px 16px; border-left: 3px solid;
+    font-family: var(--mono); font-size: 12px;
+    display: none; margin-top: 16px;
+  }
+  .alert-error { border-color: var(--red); color: var(--red); background: rgba(255,68,68,0.05); }
+  .alert-success { border-color: var(--accent); color: var(--accent); background: rgba(200,245,58,0.05); }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">▼</div>
+    <div class="logo-text">Dzul-Downloader <span>web</span></div>
+  </div>
+  <div class="header-status">
+    <div class="dot"></div>
+    localhost · running
+  </div>
+</header>
+
+<main>
+
+  <!-- TABS -->
+  <div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('download')">Download</button>
+      <button class="tab" onclick="switchTab('history')">History</button>
+    </div>
+
+    <!-- DOWNLOAD TAB -->
+    <div id="tab-download" class="tab-content active">
+
+      <!-- URL Panel -->
+      <div class="panel">
+        <div class="panel-label">Input URL</div>
+        <div class="url-row">
+          <div class="url-prefix">URL</div>
+          <input id="url-input" type="text" placeholder="https://youtube.com/watch?v=..." autocomplete="off"/>
+          <button class="btn-fetch" id="btn-fetch" onclick="fetchInfo()">FETCH</button>
+        </div>
+
+        <div id="alert-fetch" class="alert alert-error"></div>
+
+        <!-- Video Info Card -->
+        <div id="info-card">
+          <img id="info-thumb" class="info-thumb" src="" alt=""/>
+          <div class="info-body">
+            <div id="info-title" class="info-title"></div>
+            <div class="info-meta">
+              <span id="info-uploader">👤</span>
+              <span id="info-duration">⏱</span>
+              <span id="info-views">👁</span>
+            </div>
+            <div id="info-desc" class="info-desc"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Options Panel -->
+      <div class="panel" style="margin-top: 16px;">
+        <div class="panel-label">Options</div>
+        <div class="options-grid">
+          <div class="opt-group">
+            <label>Format</label>
+            <select id="opt-format" onchange="onFormatChange()">
+              <option value="video">Video (MP4)</option>
+              <option value="audio">Audio (MP3)</option>
+            </select>
+          </div>
+          <div class="opt-group" id="quality-group">
+            <label>Quality</label>
+            <select id="opt-quality">
+              <option value="best">Best Available</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+              <option value="360">360p</option>
+            </select>
+          </div>
+          <div class="opt-group span-2">
+            <label>Output Folder</label>
+            <input type="text" id="opt-dir" placeholder="~/Downloads"/>
+          </div>
+        </div>
+        <button class="btn-download" id="btn-download" onclick="startDownload()">
+          ▼ &nbsp; START DOWNLOAD
+        </button>
+      </div>
+
+      <!-- Progress Panel -->
+      <div class="panel" id="progress-panel" style="margin-top: 16px;">
+        <div class="panel-label">Progress</div>
+        <div style="display:flex; align-items:flex-end; gap:16px; margin-bottom:12px;">
+          <div class="progress-pct" id="prog-pct">0%</div>
+          <div id="prog-badge" class="status-badge badge-downloading">
+            <span>Downloading</span>
+          </div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="prog-bar"></div>
+        </div>
+        <div class="progress-stats">
+          <span id="prog-speed">— /s</span>
+          <span id="prog-eta">ETA —</span>
+          <span id="prog-size">—</span>
+        </div>
+        <div class="log-box" id="log-box"></div>
+        <div id="alert-dl" class="alert" style="margin-top:12px;"></div>
+      </div>
+
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div id="tab-history" class="tab-content">
+      <div class="panel">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+          <div class="panel-label" style="margin:0;">Download History</div>
+          <button class="btn-del" onclick="clearAllHistory()">CLEAR ALL</button>
+        </div>
+        <div id="history-list">
+          <div class="empty-state">No downloads yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  let videoInfo = null;
+  let currentWs = null;
+
+  // ── Init ──────────────────────────────────────────────────────
+  fetch('/api/default-dir').then(r => r.json()).then(d => {
+    document.getElementById('opt-dir').value = d.dir;
+  });
+
+  // ── Tabs ──────────────────────────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelector(`[onclick="switchTab('${name}')"]`).classList.add('active');
+    document.getElementById(`tab-${name}`).classList.add('active');
+    if (name === 'history') loadHistory();
+  }
+
+  // ── Fetch Info ────────────────────────────────────────────────
+  async function fetchInfo() {
+    const url = document.getElementById('url-input').value.trim();
+    if (!url) return;
+
+    setAlert('alert-fetch', '', '');
+    const btn = document.getElementById('btn-fetch');
+    btn.disabled = true; btn.textContent = '...';
+
+    document.getElementById('info-card').style.display = 'none';
+
+    try {
+      const res = await fetch('/api/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setAlert('alert-fetch', 'error', data.error || 'Failed to fetch info');
+      } else {
+        videoInfo = data;
+        showInfoCard(data);
+      }
+    } catch (e) {
+      setAlert('alert-fetch', 'error', 'Network error: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = 'FETCH';
+    }
+  }
+
+  function showInfoCard(d) {
+    document.getElementById('info-thumb').src = d.thumbnail || '';
+    document.getElementById('info-title').textContent = d.title;
+    document.getElementById('info-uploader').textContent = '👤 ' + (d.uploader || 'Unknown');
+    document.getElementById('info-duration').textContent = '⏱ ' + d.duration;
+    document.getElementById('info-views').textContent = d.view_count
+      ? '👁 ' + Number(d.view_count).toLocaleString()
+      : '';
+    document.getElementById('info-desc').textContent = d.description || '';
+
+    // Populate quality from available formats
+    const sel = document.getElementById('opt-quality');
+    sel.innerHTML = '<option value="best">Best Available</option>';
+    (d.formats || []).forEach(f => {
+      const o = document.createElement('option');
+      o.value = f.value; o.textContent = f.label + (f.fps ? ` (${f.fps}fps)` : '');
+      sel.appendChild(o);
+    });
+
+    document.getElementById('info-card').style.display = 'block';
+  }
+
+  function onFormatChange() {
+    const fmt = document.getElementById('opt-format').value;
+    document.getElementById('quality-group').style.opacity = fmt === 'audio' ? '0.3' : '1';
+    document.getElementById('quality-group').style.pointerEvents = fmt === 'audio' ? 'none' : '';
+  }
+
+  // ── Download ──────────────────────────────────────────────────
+  function startDownload() {
+    const url = document.getElementById('url-input').value.trim();
+    if (!url) { setAlert('alert-dl', 'error', 'Please enter a URL first.'); return; }
+
+    const format = document.getElementById('opt-format').value;
+    const quality = document.getElementById('opt-quality').value;
+    const output_dir = document.getElementById('opt-dir').value.trim();
+
+    if (currentWs) { currentWs.close(); currentWs = null; }
+
+    setAlert('alert-dl', '', '');
+    resetProgress();
+
+    const pp = document.getElementById('progress-panel');
+    pp.style.display = 'block';
+    pp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const ws = new WebSocket(`ws://${location.host}/ws/download`);
+    currentWs = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ url, format, quality, output_dir }));
+      setBadge('downloading');
+      document.getElementById('btn-download').disabled = true;
+    };
+
+    ws.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+
+      if (d.type === 'progress') {
+        updateProgress(d.percent, d.speed, d.eta, d.filesize, d.line);
+      } else if (d.type === 'done') {
+        updateProgress(100, '', '', '', d.message);
+        setBadge('done');
+        setAlert('alert-dl', 'success', `✓ ${d.title} — saved to ${output_dir}`);
+        document.getElementById('btn-download').disabled = false;
+        loadHistory();
+      } else if (d.type === 'error') {
+        setBadge('error');
+        setAlert('alert-dl', 'error', d.message);
+        document.getElementById('btn-download').disabled = false;
+        appendLog(d.message, 'err');
+      }
+    };
+
+    ws.onerror = () => {
+      setBadge('error');
+      setAlert('alert-dl', 'error', 'WebSocket error');
+      document.getElementById('btn-download').disabled = false;
+    };
+  }
+
+  function resetProgress() {
+    document.getElementById('prog-pct').textContent = '0%';
+    document.getElementById('prog-bar').style.width = '0%';
+    document.getElementById('prog-speed').textContent = '— /s';
+    document.getElementById('prog-eta').textContent = 'ETA —';
+    document.getElementById('prog-size').textContent = '—';
+    document.getElementById('log-box').innerHTML = '';
+    document.getElementById('alert-dl').style.display = 'none';
+  }
+
+  function updateProgress(pct, speed, eta, size, line) {
+    document.getElementById('prog-pct').textContent = Math.round(pct) + '%';
+    document.getElementById('prog-bar').style.width = pct + '%';
+    if (speed) document.getElementById('prog-speed').textContent = speed;
+    if (eta) document.getElementById('prog-eta').textContent = 'ETA ' + eta;
+    if (size) document.getElementById('prog-size').textContent = size;
+    if (line) appendLog(line, pct === 100 ? 'done' : 'active');
+  }
+
+  function appendLog(msg, cls) {
+    const box = document.getElementById('log-box');
+    const p = document.createElement('p');
+    p.textContent = '> ' + msg;
+    if (cls === 'done') p.className = 'done-line';
+    else if (cls === 'err') p.className = 'err-line';
+    else if (cls === 'active') p.className = 'active';
+    box.appendChild(p);
+    box.scrollTop = box.scrollHeight;
+    // Keep log manageable
+    while (box.children.length > 80) box.removeChild(box.firstChild);
+  }
+
+  function setBadge(status) {
+    const b = document.getElementById('prog-badge');
+    b.className = 'status-badge';
+    const labels = { downloading: 'Downloading', done: 'Complete', error: 'Error', pending: 'Pending' };
+    const classes = { downloading: 'badge-downloading', done: 'badge-done', error: 'badge-error', pending: 'badge-pending' };
+    b.classList.add(classes[status]);
+    b.innerHTML = `<span>${labels[status]}</span>`;
+  }
+
+  // ── History ───────────────────────────────────────────────────
+  async function loadHistory() {
+    const res = await fetch('/api/history');
+    const items = await res.json();
+    const list = document.getElementById('history-list');
+
+    if (!items.length) {
+      list.innerHTML = '<div class="empty-state">No downloads yet.</div>';
+      return;
+    }
+
+    list.innerHTML = items.map(item => `
+      <div class="history-item" id="hi-${item.id}">
+        <div>
+          <div class="history-title">${escHtml(item.title || item.url)}</div>
+          <div class="history-sub">
+            <span>${item.format?.toUpperCase() || 'VIDEO'}</span>
+            <span>${item.quality === 'best' ? 'Best' : item.quality + 'p'}</span>
+            ${item.filesize ? `<span>${item.filesize}</span>` : ''}
+            <span>${fmtDate(item.created_at)}</span>
+          </div>
+        </div>
+        <div class="history-actions">
+          <span class="status-badge ${badgeClass(item.status)}">${item.status}</span>
+          <button class="btn-del" onclick="deleteHistory('${item.id}')">✕</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function deleteHistory(id) {
+    await fetch(`/api/history/${id}`, { method: 'DELETE' });
+    const el = document.getElementById(`hi-${id}`);
+    if (el) el.remove();
+    if (!document.querySelector('.history-item')) {
+      document.getElementById('history-list').innerHTML = '<div class="empty-state">No downloads yet.</div>';
+    }
+  }
+
+  async function clearAllHistory() {
+    const items = await fetch('/api/history').then(r => r.json());
+    await Promise.all(items.map(i => fetch(`/api/history/${i.id}`, { method: 'DELETE' })));
+    document.getElementById('history-list').innerHTML = '<div class="empty-state">No downloads yet.</div>';
+  }
+
+  // ── Utils ─────────────────────────────────────────────────────
+  function setAlert(id, type, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = 'alert';
+    if (!msg) { el.style.display = 'none'; return; }
+    el.classList.add(type === 'error' ? 'alert-error' : 'alert-success');
+    el.style.display = 'block';
+  }
+
+  function badgeClass(s) {
+    return { done: 'badge-done', error: 'badge-error', downloading: 'badge-downloading' }[s] || 'badge-pending';
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // Enter key on URL input
+  document.getElementById('url-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') fetchInfo();
+  });
+</script>
+</body>
+</html>
